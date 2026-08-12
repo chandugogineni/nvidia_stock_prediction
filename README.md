@@ -916,6 +916,16 @@ Return RMSE          : 0.031638
 Return R²            : -0.0144
 Directional Accuracy : 53.00%
 
+
+| Model             |         MAE |        RMSE |           R² | Direction Accuracy |
+| ----------------- | ----------: | ----------: | -----------: | -----------------: |
+| Naive Baseline    |      1.7791 |      2.9077 |       0.9981 |                  — |
+| Linear Regression |      1.7743 |      2.9151 |       0.9981 |             53.92% |
+| Random Forest     |      1.7754 |      2.9081 |       0.9981 |             52.91% |
+| XGBoost           |     0.0237* |     0.0329* |     -0.0182* |             53.10% |
+| XGBoost + LLM     | **0.02305** | **0.03163** | **-0.01698** |         **53.39%** |
+
+
 Model:
 
 models/xgboost.pkl
