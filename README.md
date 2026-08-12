@@ -1,4 +1,4 @@
-NVIDIA Stock Prediction with XGBoost, Ollama LLM and RAG
+# NVIDIA Stock Prediction with XGBoost, Ollama LLM and RAG
 
 1. Project Overview
 
