@@ -1,886 +1,407 @@
-# NVIDIA Stock Prediction (ML + RAG + LLM)
+NVIDIA Stock Prediction with XGBoost, Ollama LLM and RAG
 
-An end-to-end project that predicts next-day NVIDIA (`NVDA`) stock returns by combining classical technical-indicator ML with retrieval-augmented generation over financial news. Started as a straightforward XGBoost regression project and is being extended to test whether LLM-derived signals from news actually add predictive value on top of price/volume features.
+1. Project Overview
 
-> This is a research/education project, not investment advice. Directional accuracy in the low 50s is not a trading edge on its own — see the disclaimer at the bottom.
+This project predicts the next trading-day return and estimated next closing price of NVIDIA (NVDA) using a hybrid machine-learning and LLM/RAG architecture.
 
-## Why this project exists
+The project combines:
 
-The first version used only price and volume history — moving averages, momentum, volatility, RSI, that kind of thing — and topped out around 53% directional accuracy with XGBoost. Adding more technical indicators didn't move the needle much, which suggests price/volume alone carries a pretty weak signal for next-day returns. So the current phase adds a second information stream: NVIDIA financial news, pulled through a RAG pipeline and summarized into structured features by an LLM (sentiment, perceived AI/GPU demand, regulatory risk, etc.), then fed into the same ML model alongside the technical features.
+Historical NVIDIA market data
 
-The core question isn't "can the LLM sound convincing about where NVDA is headed" — it's whether adding that information measurably improves out-of-sample accuracy over the technical-only baseline.
+Technical/time-series feature engineering
 
-## Architecture
+XGBoost regression
 
-```
-NVIDIA market data ──► feature engineering ──► XGBoost ──► ML prediction
-                                                                 │
-NVIDIA news ──► documents ──► embeddings ──► FAISS ──► RAG retrieval ──► LLM
-                                                                 │
-                                                          LLM features
-                                                                 │
-                                              ML prediction + LLM features
-                                                                 │
-                                                    ensemble model
-                                                                 │
-                                                       BUY / HOLD / SELL
-```
+Random Forest and Linear Regression baselines
 
-## Objectives
+Ollama local LLM inference
 
-The main objectives are:
+News collection and preprocessing
 
-Download NVIDIA historical market data.
-Clean and preprocess the data.
-Generate technical indicators.
-Create a next-day prediction target.
-Split the data chronologically.
-Establish a naive baseline.
-Train Linear Regression.
-Train Random Forest.
-Train XGBoost.
-Evaluate regression performance.
-Evaluate directional accuracy.
-Collect NVIDIA-related news.
-Convert news into documents.
-Generate embeddings.
-Store embeddings in FAISS.
-Retrieve relevant news using semantic search.
-Use an LLM to analyze retrieved news.
-Convert LLM output into structured numerical features.
-Combine technical ML features and LLM features.
-Train an ensemble model.
-Backtest the final strategy.
-Compare the final system against a naive baseline and buy-and-hold strategy.
+LLM-derived financial signals
 
-## Tech stack
+FAISS-based Retrieval-Augmented Generation (RAG)
 
-- **Data**: `yfinance` for OHLCV history and recent news
-- **ML**: pandas, numpy, scikit-learn, XGBoost
-- **RAG**: OpenAI embeddings (`text-embedding-3-small`), FAISS for vector search
-- **LLM**: OpenAI API, used purely for feature extraction — not for generating price predictions directly
-- **Config**: python-dotenv
+Chronological train/validation/test splitting
 
-## Features
+Future-date prediction
 
-**Technical (21):** daily return, MA ratios (5/20/50), momentum (5/10/20), volatility (5/20/50), RSI-14, relative volume, return lags (1/2/3/5/10), high-low range, open-close range, volume change, log volume.
+BUY / HOLD / SELL signal generation
 
-**LLM-derived (7):** sentiment, market impact, risk, confidence, AI demand, regulatory risk, earnings outlook — each a numeric score extracted from the most relevant retrieved news for a given date.
+Important: This is a research/engineering project, not financial advice. Stock prices are highly unpredictable and model accuracy does not guarantee future performance.
 
-## Target variable
+2. High-Level Architecture
 
-```python
-Target_Return = (Next_Close - Close) / Close
-```
+                         ┌─────────────────────────┐
+                         │ NVIDIA Historical Data  │
+                         │   Yahoo Finance / CSV   │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │   Data Download         │
+                         │   data_download.py      │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │ Data Preprocessing      │
+                         │ data_preprocessing.py   │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │ Feature Engineering     │
+                         │ feature_engineering.py  │
+                         └────────────┬────────────┘
+                                      │
+                     ┌────────────────┴────────────────┐
+                     │                                 │
+                     ▼                                 ▼
+          ┌─────────────────────┐          ┌──────────────────────┐
+          │ Technical ML Data   │          │ News Collection      │
+          │                     │          │ news_collection.py   │
+          └──────────┬──────────┘          └──────────┬───────────┘
+                     │                                 │
+                     │                                 ▼
+                     │                    ┌──────────────────────┐
+                     │                    │ News Preprocessing   │
+                     │                    │ news_preprocessing.py│
+                     │                    └──────────┬───────────┘
+                     │                               │
+                     │                               ▼
+                     │                    ┌──────────────────────┐
+                     │                    │ Ollama Local LLM     │
+                     │                    │ ollama_llm.py        │
+                     │                    └──────────┬───────────┘
+                     │                               │
+                     │                               ▼
+                     │                    ┌──────────────────────┐
+                     │                    │ LLM Features         │
+                     │                    │ sentiment / risk /   │
+                     │                    │ demand / outlook     │
+                     │                    └──────────┬───────────┘
+                     │                               │
+                     │                               ▼
+                     │                    ┌──────────────────────┐
+                     │                    │ FAISS RAG Index      │
+                     │                    │ rag_index.py         │
+                     │                    │ rag_retriever.py    │
+                     │                    └──────────┬───────────┘
+                     │                               │
+                     └──────────────┬────────────────┘
+                                    ▼
+                         ┌─────────────────────────┐
+                         │ Merge Technical + LLM   │
+                         │ Features                │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │ Chronological Splitting │
+                         │ Train / Validation/Test │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │ XGBoost + LLM           │
+                         │ xgboost_training.py     │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │ xgboost_llm.pkl         │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │ Future Prediction       │
+                         │ predict_future.py       │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │ Predicted Return        │
+                         │ Predicted Price         │
+                         │ BUY / HOLD / SELL       │
+                         └─────────────────────────┘
 
-Predicting returns rather than raw price, since price is trivially autocorrelated (that's the 0.998 R² baseline above) and doesn't tell you much on its own.
+3. Final Recommended Project Structure
 
-## Project structure
-
-```
 nvidia_stock_prediction/
+│
 ├── data/
-│   ├── raw/nvidia_historical_data.csv
-│   ├── processed/{train,validation,test}.csv
-│   ├── news/{nvidia_news,nvidia_documents}.csv
-│   └── vector_store/{nvidia.faiss, metadata.pkl}
+│   ├── raw/
+│   │   └── nvidia_historical_data.csv
+│   │
+│   └── processed/
+│       ├── nvidia_features.csv
+│       ├── nvidia_features_llm.csv
+│       ├── train.csv
+│       ├── validation.csv
+│       ├── test.csv
+│       ├── train_llm.csv
+│       ├── validation_llm.csv
+│       ├── test_llm.csv
+│       ├── predictions.csv
+│       └── predictions_llm.csv
+│
 ├── models/
 │   ├── linear_regression.pkl
 │   ├── random_forest.pkl
-│   ├── xgboost.pkl
-│   └── ensemble.pkl
-└── src/
-    ├── download_data.py
-    ├── feature_engineering.py
-    ├── data_splitting.py
-    ├── baseline.py
-    ├── model_training.py
-    ├── random_forest_training.py
-    ├── xgboost_training.py
-    ├── news_collection.py
-    ├── news_preprocessing.py
-    ├── rag_index.py
-    ├── rag_retriever.py
-    ├── llm_sentiment.py
-    ├── llm_features.py
-    ├── ensemble_model.py
+│   └── xgboost_llm.pkl
+│
+├── src/
+│   ├── pipeline.py
+│   ├── data_download.py
+│   ├── data_preprocessing.py
+│   ├── feature_engineering.py
+│   ├── data_splitting.py
+│   │
+│   ├── news_collection.py
+│   ├── news_preprocessing.py
+│   ├── ollama_llm.py
+│   ├── generate_llm_features.py
+│   ├── merge_llm_features.py
+│   ├── llm_data_splitting.py
+│   │
+│   ├── rag_index.py
+│   ├── rag_retriever.py
+│   ├── build_faiss_index.py
+│   │
+│   ├── baseline.py
+│   ├── model_training.py
+│   ├── random_forest_training.py
+│   ├── xgboost_training.py
+│   ├── prediction.py
+│   └── predict_future.py
+│
+├── requirements.txt
+├── README.md
+└── .gitignore
 
-`requirements.txt
+4. Files to Keep
 
-## Current Project Results
+Core data pipeline
 
-The project has already been tested with several models.
+data_download.py
 
-Naive Baseline
+Downloads/updates NVIDIA historical market data.
 
-The naive baseline predicts the next price using the current price.
+Input:
 
-MAE  : 1.7791
-RMSE : 2.9077
-R²   : 0.9981
+Yahoo Finance / external market source
 
-The very high price R² is expected because stock prices are highly autocorrelated.
+Output:
 
-For this reason, price R² should not be the only evaluation metric.
+data/raw/nvidia_historical_data.csv
 
-## Linear Regression
+data_preprocessing.py
 
-The Linear Regression model was trained using technical features.
+Cleans and normalizes the raw market dataset.
 
-Current result:
+Responsibilities:
 
-MAE  : 1.7743
-RMSE : 2.9151
-R²   : 0.9981
+Parse dates
 
-Return MAE  : 0.023691
-Return RMSE : 0.032222
-Return R²   : -0.0039
+Sort chronologically
 
-Directional Accuracy: 53.92%
+Remove invalid rows
 
-Model:
+Normalize column names
 
-models/linear_regression.pkl
-## Random Forest
+Handle missing values
 
-Random Forest was trained using technical features.
+feature_engineering.py
 
-Current result:
+Creates technical features.
 
-Return MAE          : 0.023699
-Return RMSE         : 0.032193
-Return R²           : -0.0021
+Current features include:
 
-Price MAE           : 1.7754
-Price RMSE          : 2.9081
-Price R²            : 0.9981
-
-Directional Accuracy: 52.91%
-
-Important features included:
-
-High_Low_Range
-Volatility_20
-MA_50_Ratio
-Log_Volume
-MA_20_Ratio
-Open_Close_Range
 Daily_Return
-Volume_Change
+
 MA_5_Ratio
 
-Model:
-
-models/random_forest.pkl
-## XGBoost
-
-XGBoost is currently the primary machine-learning model.
-
-The project initially used 9 features and was later expanded to 21 features.
-
-The latest feature set includes:
-
-High_Low_Range
-Volume_Change
-Momentum_20
-Return_Lag_1
 MA_20_Ratio
-Volatility_20
+
+MA_50_Ratio
+
 Volatility_5
-Relative_Volume
-Return_Lag_10
-Momentum_10
-Momentum_5
-Return_Lag_5
-Volatility_50
-MA_50_Ratio
-Open_Close_Range
-Daily_Return
-RSI_14
-Log_Volume
-Return_Lag_2
-Return_Lag_3
-MA_5_Ratio
 
-Latest reported result:
-
-MAE                  : 0.023906
-RMSE                 : 0.032865
-R²                   : -0.0179
-Directional Accuracy : 50.10%
-
-Return MAE           : 0.023039
-Return RMSE          : 0.031638
-Return R²            : -0.0144
-Directional Accuracy : 53.00%
-
-Model:
-
-models/xgboost.pkl
-
-## Important Finding
-
-Adding more technical indicators did not produce a major improvement.
-
-The latest XGBoost model achieved approximately:
-
-53% directional accuracy
-
-This suggests that the available historical price/volume features alone contain only a weak signal for next-day return prediction.
-
-Therefore, the project is being extended with unstructured information, especially financial news.
-
-The goal is not simply to add more technical indicators.
-
-Instead:
-
-Market Information
-        +
-News Information
-        +
-LLM Information
-        ↓
-Improved Feature Representation
-
-## NVIDIA Historical Data
-
-NVIDIA historical data is downloaded using yfinance.
-
-Example:
-
-import yfinance as yf
-import pandas as pd
-
-ticker = "NVDA"
-
-nvda = yf.Ticker(ticker)
-
-df = nvda.history(
-    period="max"
-)
-
-df.reset_index(
-    inplace=True
-)
-
-print(df.head())
-print(df.tail())
-
-print(
-    f"Total rows: {len(df)}"
-)
-
-df.to_csv(
-    "data/raw/nvidia_historical_data.csv",
-    index=False
-)
-
-print(
-    "Saved to data/raw/nvidia_historical_data.csv"
-)
-
-The historical dataset contains fields such as:
-
-Date
-Open
-High
-Low
-Close
-Volume
-Dividends
-Stock Splits
-
-## Data Preprocessing
-
-The raw NVIDIA data is processed to create machine-learning features.
-
-The processed dataset contains:
-
-Date
-Open
-High
-Low
-Close
-Volume
-Dividends
-Stock Splits
-Previous_Close
-Daily_Return
-MA_5
-MA_20
-MA_50
-MA_5_Ratio
-MA_20_Ratio
-MA_50_Ratio
 Volatility_20
+
+Volatility_50
+
 High_Low_Range
+
 Open_Close_Range
+
 Volume_Change
+
 Log_Volume
-Next_Close
-Target_Return
-11. Target Variable
 
-The primary prediction target is:
+Relative_Volume
 
-Target_Return
+Momentum_5
 
-Calculated as:
+Momentum_10
 
-Target_Return = (Next_Close - Close) / Close
+Momentum_20
 
-Equivalent:
+Return_Lag_1
 
-Target_Return = Next_Close / Close - 1
+Return_Lag_2
 
-For example:
+Return_Lag_3
 
-Current Close = 200
-Next Close    = 210
+Return_Lag_5
 
-Return = (210 - 200) / 200
+Return_Lag_10
 
-Return = 0.05
+RSI_14
 
-Return = +5%
-12. Technical Features
-Daily Return
-df["Daily_Return"] = (
-    df["Close"].pct_change()
-)
-Previous Close
-df["Previous_Close"] = (
-    df["Close"].shift(1)
-)
-Moving Average
-df["MA_5"] = (
-    df["Close"].rolling(5).mean()
-)
+Target:
 
-df["MA_20"] = (
-    df["Close"].rolling(20).mean()
-)
+Target_Return =
+    Next_Close / Close - 1
 
-df["MA_50"] = (
-    df["Close"].rolling(50).mean()
-)
-Moving Average Ratios
-df["MA_5_Ratio"] = (
-    df["Close"] / df["MA_5"] - 1
-)
+Output:
 
-df["MA_20_Ratio"] = (
-    df["Close"] / df["MA_20"] - 1
-)
+data/processed/nvidia_features.csv
 
-df["MA_50_Ratio"] = (
-    df["Close"] / df["MA_50"] - 1
-)
-High-Low Range
-df["High_Low_Range"] = (
-    df["High"] - df["Low"]
-) / df["Close"]
-Open-Close Range
-df["Open_Close_Range"] = (
-    df["Close"] - df["Open"]
-) / df["Open"]
-Volume Change
-df["Volume_Change"] = (
-    df["Volume"].pct_change()
-)
-Log Volume
-import numpy as np
+5. LLM + Ollama Pipeline
 
-df["Log_Volume"] = (
-    np.log1p(df["Volume"])
-)
-
-## Momentum Features
-
-Momentum features are calculated using historical returns.
-
-Example:
-
-df["Momentum_5"] = (
-    df["Close"].pct_change(5)
-)
-
-df["Momentum_10"] = (
-    df["Close"].pct_change(10)
-)
-
-df["Momentum_20"] = (
-    df["Close"].pct_change(20)
-)
-## Lag Features
-
-Historical returns are included as lagged variables.
-
-df["Return_Lag_1"] = (
-    df["Daily_Return"].shift(1)
-)
-
-df["Return_Lag_2"] = (
-    df["Daily_Return"].shift(2)
-)
-
-df["Return_Lag_3"] = (
-    df["Daily_Return"].shift(3)
-)
-
-df["Return_Lag_5"] = (
-    df["Daily_Return"].shift(5)
-)
-
-df["Return_Lag_10"] = (
-    df["Daily_Return"].shift(10)
-)
-15. Volatility Features
-df["Volatility_5"] = (
-    df["Daily_Return"]
-    .rolling(5)
-    .std()
-)
-
-df["Volatility_20"] = (
-    df["Daily_Return"]
-    .rolling(20)
-    .std()
-)
-
-df["Volatility_50"] = (
-    df["Daily_Return"]
-    .rolling(50)
-    .std()
-)
-## RSI
-
-A 14-day RSI can be calculated as:
-
-delta = df["Close"].diff()
-
-gain = delta.clip(
-    lower=0
-)
-
-loss = -delta.clip(
-    upper=0
-)
-
-avg_gain = gain.rolling(14).mean()
-
-avg_loss = loss.rolling(14).mean()
-
-rs = avg_gain / avg_loss
-
-df["RSI_14"] = (
-    100 - (100 / (1 + rs))
-)
-## Chronological Data Splitting
-
-Stock-market data should not normally be randomly shuffled.
-
-The project uses chronological splitting.
-
-Example:
-
-Historical Data
-       │
-       ▼
-Training
-       │
-       ▼
-Validation
-       │
-       ▼
-Testing
-
-Current datasets:
-
-data/processed/train.csv
-data/processed/validation.csv
-data/processed/test.csv
-
-The test set currently extends to:
-
-2026-08-06
-## Why Random Train/Test Splitting Is Avoided
-
-Do not use:
-
-train_test_split(
-    df,
-    test_size=0.2,
-    random_state=42
-)
-
-for the final time-series experiment.
-
-Random splitting can cause future observations to appear in the training data while older observations appear in the test set.
+The LLM is not used as a direct replacement for XGBoost.
 
 Instead:
 
-train = df.iloc[:train_end]
+Financial News
+      ↓
+Ollama
+      ↓
+Structured Financial Signals
+      ↓
+XGBoost
+      ↓
+Prediction
 
-validation = df.iloc[
-    train_end:validation_end
-]
+The LLM generates numerical features that are combined with technical features.
 
-test = df.iloc[
-    validation_end:
-]
+LLM features
 
-This better represents real-world forecasting.
+The current model uses:
 
-## RAG Extension
+LLM_Sentiment
+LLM_Market_Impact
+LLM_AI_Demand
+LLM_Regulatory_Risk
+LLM_Earnings_Outlook
+LLM_Supply_Chain_Risk
+LLM_Competition_Risk
+LLM_Confidence
 
-The RAG system adds unstructured NVIDIA financial news.
+These are the actual LLM features expected by the trained XGBoost model.
 
-The RAG pipeline is:
+Do not mix them with unrelated columns such as:
+
+market_sentiment
+market_strength
+risk_score
+trend_score
+reasoning_score
+
+unless the training pipeline is explicitly changed to use those columns.
+
+6. Ollama
+
+Ollama runs the LLM locally.
+
+Example installation:
+
+winget install Ollama.Ollama
+
+Verify:
+
+ollama --version
+
+Download a model:
+
+ollama pull llama3.2
+
+Check installed models:
+
+ollama list
+
+Test:
+
+ollama run llama3.2
+
+The project can then use Ollama through the local API.
+
+7. RAG Architecture
+
+The RAG component provides relevant financial news/context to the LLM.
 
 News
  ↓
-Documents
+Preprocessing
+ ↓
+Chunks/Documents
  ↓
 Embeddings
  ↓
-FAISS
+FAISS Index
  ↓
-Semantic Retrieval
+Retriever
  ↓
 Relevant News
  ↓
-LLM
+Ollama
  ↓
-Structured Features
-## Embeddings
+Structured Financial Signals
 
-Each news document is converted into an embedding.
+Relevant files:
 
-The embedding model is:
+news_collection.py
+news_preprocessing.py
+rag_index.py
+rag_retriever.py
+build_faiss_index.py
+ollama_llm.py
 
-text-embedding-3-small
+8. Chronological Data Splitting
 
-Example:
+This is a time-series problem, so random train/test splitting should not be used.
 
-response = client.embeddings.create(
-    model="text-embedding-3-small",
-    input=texts
-)
+The project uses:
 
-The result is a numerical vector representing the semantic meaning of the article.
+Older data
+    ↓
+Training
+    ↓
+Validation
+    ↓
+Testing
+    ↓
+Newest data
 
-## FAISS Vector Database
+Current approximate split:
 
-FAISS is used for semantic similarity search.
+Training   : 4815 rows
+Validation : 1032 rows
+Testing    : 1032 rows
 
-The vector database contains:
+The exact row counts change when new market data is downloaded.
 
-data/vector_store/
-│
-├── nvidia.faiss
-└── metadata.pkl
+9. XGBoost + LLM
 
-The FAISS index stores the embeddings.
+The final trained model is:
 
-The metadata stores:
+models/xgboost_llm.pkl
 
-title
-publication date
-text
-URL
+The model expects 29 features:
 
-## RAG Retrieval
-
-The retriever receives a query such as:
-
-NVIDIA AI GPU demand and earnings outlook
-
-The query is converted to an embedding.
-
-FAISS searches for the most similar documents.
-
-Example:
-
-results = retrieve_news(
-    "NVIDIA AI GPU demand and earnings outlook",
-    top_k=5
-)
-
-The result is the top five semantically relevant news articles.
-
-## LLM Analysis
-
-The retrieved documents are passed to an LLM.
-
-The LLM is instructed to produce structured information.
-
-Example output:
-
-{
-    "sentiment": 0.72,
-    "market_impact": 0.68,
-    "risk": 0.31,
-    "confidence": 0.84,
-    "ai_demand": 0.91,
-    "regulatory_risk": -0.42,
-    "earnings_outlook": 0.77,
-    "summary": "Recent NVIDIA news is generally positive."
-}
-
-These values become ML features.
-
-## LLM Features
-
-The final LLM feature set is:
-
-LLM_Sentiment
-LLM_Market_Impact
-LLM_Risk
-LLM_Confidence
-LLM_AI_Demand
-LLM_Regulatory_Risk
-LLM_Earnings_Outlook
-
-These features are different from traditional technical indicators.
-
-Technical model:
-
-Price
-Volume
-Momentum
-Volatility
-RSI
-
-LLM model:
-
-Sentiment
-News impact
-AI demand
-Regulatory risk
-Earnings outlook
-## Hybrid Feature Architecture
-
-The final feature matrix becomes:
-
-                    Feature Vector
-
-Technical Features
-──────────────────────────────────
-Daily_Return
-MA_5_Ratio
-MA_20_Ratio
-MA_50_Ratio
-Momentum_5
-Momentum_10
-Momentum_20
-Volatility_5
-Volatility_20
-Volatility_50
-RSI_14
-Relative_Volume
-Return_Lag_1
-Return_Lag_2
-Return_Lag_3
-Return_Lag_5
-Return_Lag_10
-High_Low_Range
-Open_Close_Range
-Volume_Change
-Log_Volume
-
-                    +
-
-LLM Features
-──────────────────────────────────
-LLM_Sentiment
-LLM_Market_Impact
-LLM_Risk
-LLM_Confidence
-LLM_AI_Demand
-LLM_Regulatory_Risk
-LLM_Earnings_Outlook
-
-                    ↓
-
-                XGBoost
-
-                    ↓
-
-             Predicted Return
-## Why the LLM Should Not Directly Predict the Price
-
-The system should NOT depend on:
-
-LLM
- ↓
-"NVIDIA will rise to $250"
-
-Instead:
-
-News
- ↓
-RAG
- ↓
-LLM
- ↓
-Structured signals
- ↓
-Machine Learning Model
- ↓
-Prediction
-
-The LLM is used as an information extraction and feature generation system.
-
-The numerical prediction remains the responsibility of the ML model.
-
-## Ensemble Architecture
-
-The final system can use:
-
-XGBoost Prediction
-        +
-LLM Sentiment
-        +
-LLM Market Impact
-        +
-LLM Risk
-        +
-Technical Features
-        ↓
-Meta Model
-        ↓
-Final Prediction
-
-Possible final models:
-
-Logistic Regression
-Random Forest
-XGBoost
-LightGBM
-Neural Network
-
-For the first implementation, XGBoost is recommended.
-
-## Final Prediction
-
-The system can generate three possible signals:
-
-BUY
-HOLD
-SELL
-
-Example:
-
-Predicted Return > +1%
-        ↓
-       BUY
-Predicted Return between -1% and +1%
-        ↓
-      HOLD
-Predicted Return < -1%
-        ↓
-      SELL
-
-These thresholds should be optimized using validation data rather than selected based on test results.
-## The biggest risk: look-ahead bias
-
-If NVIDIA news is published at 6pm on a given trading day, it can't be used to predict that same day's close — only future ones. Every news document needs a timestamp check against the prediction date before it's allowed anywhere near the model. This matters even more for backtesting: the current `yfinance` news feed only returns recent articles, so it's not usable as-is for generating LLM features going back to 1999. A proper historical backtest needs a news source with real publication timestamps, or the RAG features end up being 2026 news attached to 2015 prices — which is a straightforward way to fool yourself into thinking the model works.
-
-## Known limitations / what's not done yet
-
-- News history is recent-only; historical backtesting of the RAG/LLM component isn't valid yet
-- No fundamentals (revenue, EPS, margins, guidance) in the feature set yet
-- No reranking or metadata filtering on retrieval — it's plain semantic search for now
-- Backtest doesn't yet account for transaction costs or slippage
-- No experiment tracking or model versioning in place
-
-## Roadmap
-
-- Pull in fundamentals (10-K/10-Q, earnings transcripts, guidance) via RAG
-- Add metadata/date filtering + reranking to retrieval instead of raw semantic search
-- Source historical news with real timestamps to make backtesting valid
-- Add Sharpe ratio, max drawdown, win rate, and transaction costs to the backtest
-- Compare naive vs. technical-only vs. technical+LLM vs. full hybrid on the same out-of-sample window
-
-## Disclaimer
-
-This is a research and learning project — not a trading system and not financial advice. ~53% directional accuracy is barely better than a coin flip and says nothing about profitability once you account for transaction costs, slippage, and the fact that markets are shaped by things no model here accounts for (macro conditions, rate decisions, geopolitics, black-swan events). Treat any output from this repo as an experiment, not a signal.
-
-## Current Project Results
-
-The project has already been tested with several models.
-
-Naive Baseline
-
-The naive baseline predicts the next price using the current price.
-
-MAE  : 1.7791
-RMSE : 2.9077
-R²   : 0.9981
-
-The very high price R² is expected because stock prices are highly autocorrelated.
-
-For this reason, price R² should not be the only evaluation metric.
-
-Linear Regression
-
-The Linear Regression model was trained using technical features.
-
-Current result:
-
-MAE  : 1.7743
-RMSE : 2.9151
-R²   : 0.9981
-
-Return MAE  : 0.023691
-Return RMSE : 0.032222
-Return R²   : -0.0039
-
-Directional Accuracy: 53.92%
-
-Model:
-
-models/linear_regression.pkl
-Random Forest
-
-Random Forest was trained using technical features.
-
-Current result:
-
-Return MAE          : 0.023699
-Return RMSE         : 0.032193
-Return R²           : -0.0021
-
-Price MAE           : 1.7754
-Price RMSE          : 2.9081
-Price R²            : 0.9981
-
-Directional Accuracy: 52.91%
-
-Important features included:
-
-High_Low_Range
-Volatility_20
-MA_50_Ratio
-Log_Volume
-MA_20_Ratio
-Open_Close_Range
-Daily_Return
-Volume_Change
-MA_5_Ratio
-
-Model:
-
-models/random_forest.pkl
-XGBoost
-
-XGBoost is currently the primary machine-learning model.
-
-The project initially used 9 features and was later expanded to 21 features.
-
-The latest feature set includes:
+Technical features
 
 High_Low_Range
 Volume_Change
@@ -904,159 +425,603 @@ Return_Lag_2
 Return_Lag_3
 MA_5_Ratio
 
-Latest reported result:
+LLM features
+
+LLM_Sentiment
+LLM_Market_Impact
+LLM_AI_Demand
+LLM_Regulatory_Risk
+LLM_Earnings_Outlook
+LLM_Supply_Chain_Risk
+LLM_Competition_Risk
+LLM_Confidence
+
+Total:
+
+21 technical + 8 LLM = 29 features
+
+The prediction dataframe must use exactly the same feature names and order.
+
+10. Model Results
+
+The current XGBoost + LLM experiment produced approximately:
+
+MAE                  : 0.023050
+RMSE                 : 0.031630
+R²                   : -0.016982
+Directional Accuracy : 53.39%
+
+This is only a modest improvement over the technical-only XGBoost experiment.
+
+Earlier technical-only XGBoost results were approximately:
 
 MAE                  : 0.023906
 RMSE                 : 0.032865
 R²                   : -0.0179
 Directional Accuracy : 50.10%
 
-Return MAE           : 0.023039
-Return RMSE          : 0.031638
-Return R²            : -0.0144
-Directional Accuracy : 53.00%
+Therefore the LLM experiment should be described as an experimental feature-augmentation approach rather than claiming that the LLM guarantees higher accuracy.
 
+11. Baseline Models
 
-| Model             |         MAE |        RMSE |           R² | Direction Accuracy |
-| ----------------- | ----------: | ----------: | -----------: | -----------------: |
-| Naive Baseline    |      1.7791 |      2.9077 |       0.9981 |                  — |
-| Linear Regression |      1.7743 |      2.9151 |       0.9981 |             53.92% |
-| Random Forest     |      1.7754 |      2.9081 |       0.9981 |             52.91% |
-| XGBoost           |     0.0237* |     0.0329* |     -0.0182* |             53.10% |
-| XGBoost + LLM     | **0.02305** | **0.03163** | **-0.01698** |         **53.39%** |
+The project contains several models for comparison.
 
+Naive baseline
 
-Model:
+baseline.py
 
-models/xgboost.pkl
+Used to establish a simple reference point.
 
-##Expected End-to-End Flow
-                    START
-                      │
-                      ▼
-             Download NVDA Data
-                      │
-                      ▼
-              Data Preprocessing
-                      │
-                      ▼
-             Feature Engineering
-                      │
-                      ▼
-            Train/Validation/Test
-                      │
-                      ▼
-               XGBoost Training
-                      │
-                      ▼
-                ML Prediction
-                      │
-                      │
-                      │
-             ┌────────┴────────┐
-             │                 │
-             ▼                 ▼
-        NVIDIA News       Historical Data
-             │                 │
-             ▼                 │
-       Text Documents          │
-             │                 │
-             ▼                 │
-         Embeddings            │
-             │                 │
-             ▼                 │
-        FAISS Vector DB        │
-             │                 │
-             ▼                 │
-         RAG Retrieval         │
-             │                 │
-             ▼                 │
-             LLM               │
-             │                 │
-             ▼                 │
-       LLM Features            │
-             │                 │
-             └────────┬────────┘
-                      ▼
-               Feature Fusion
-                      │
-                      ▼
-                 Ensemble ML
-                      │
-                      ▼
-              Final Prediction
-                      │
-              ┌───────┼───────┐
-              ▼       ▼       ▼
-             BUY     HOLD    SELL
-                      │
-                      ▼
-                  Backtest
-                      │
-                      ▼
-                 Evaluation
-## Final Goal
+Observed result:
 
-The ultimate goal is not simply to achieve a high prediction score.
+MAE  : ~1.7791
+RMSE : ~2.9077
+R²   : ~0.9981
 
-The goal is to determine whether:
+The very high price R² is largely a consequence of predicting a highly autocorrelated stock-price series. For model comparison, return prediction and directional accuracy are more informative.
 
-Technical Market Information
-          +
+Linear Regression
+
+model_training.py
+
+Purpose:
+
+Establish a simple ML baseline
+
+Compare return prediction
+
+Compare price prediction
+
+Random Forest
+
+random_forest_training.py
+
+Observed experiment:
+
+Return MAE          : 0.023699
+Return RMSE         : 0.032193
+Return R²           : -0.0021
+Directional Accuracy: 52.91%
+
+XGBoost
+
+xgboost_training.py
+
+Two variants were experimented with:
+
+Technical-only XGBoost
+XGBoost + LLM features
+
+The final project should use:
+
+XGBoost + LLM
+
+as the primary experimental model.
+
+12. Prediction
+
+There are two prediction concepts.
+
+Historical test predictions
+
+prediction.py
+
+Used to evaluate the model against known historical test data.
+
+Output:
+
+Date
+Close
+Target_Return
+Predicted_Return
+Predicted_Next_Close
+Signal
+
+Future prediction
+
+predict_future.py
+
+Loads:
+
+models/xgboost_llm.pkl
+
+and uses the latest available market row.
+
+It produces:
+
+Current price
+Predicted return
+Predicted price
+Signal
+
+Signal thresholds currently follow:
+
+prediction_return >  1%  → BUY
+prediction_return < -1%  → SELL
+otherwise                → HOLD
+
+These thresholds should be treated as configurable research parameters, not investment recommendations.
+
+13. Important Limitation for Future Dates
+
+The model cannot directly predict August 12 or August 13, 2026 from historical data unless the required input features for those prediction dates are available.
+
+For example, if the latest downloaded market data ends on:
+
+2026-08-10
+
+then:
+
+2026-08-11
+2026-08-12
+2026-08-13
+
+are future trading dates relative to the dataset.
+
+The model needs current market/news inputs to generate a new prediction.
+
+For each new trading day:
+
+Latest market data
+        +
+Latest relevant news
+        ↓
+Technical features
+        +
+RAG + Ollama features
+        ↓
+XGBoost
+        ↓
+Next-day prediction
+
+14. Recommended One-Command Pipeline
+
+Create:
+
+src/pipeline.py
+
+The goal is to run the project in one command:
+
+python src/pipeline.py
+
+Recommended sequence:
+
+1. Download market data
+2. Preprocess market data
+3. Engineer technical features
+4. Collect financial news
+5. Preprocess news
+6. Build/update FAISS index
+7. Generate LLM features with Ollama
+8. Merge technical + LLM features
+9. Split train/validation/test
+10. Train XGBoost + LLM
+11. Evaluate model
+12. Generate historical predictions
+13. Generate latest future prediction
+
+15. Recommended Pipeline Design
+
+pipeline.py should conceptually execute:
+
+run(
+    "data_download.py"
+)
+
+run(
+    "data_preprocessing.py"
+)
+
+run(
+    "feature_engineering.py"
+)
+
+run(
+    "news_collection.py"
+)
+
+run(
+    "news_preprocessing.py"
+)
+
+run(
+    "build_faiss_index.py"
+)
+
+run(
+    "generate_llm_features.py"
+)
+
+run(
+    "merge_llm_features.py"
+)
+
+run(
+    "llm_data_splitting.py"
+)
+
+run(
+    "xgboost_training.py"
+)
+
+run(
+    "prediction.py"
+)
+
+run(
+    "predict_future.py"
+)
+
+Use subprocess.run(..., check=True) so that the pipeline stops immediately when a step fails.
+
+16. Files That Can Be Removed or Deprecated
+
+Do not delete files immediately. Move old/duplicate experiments into an archive/ directory first.
+
+Recommended candidates:
+
+split_llm_data.py
+
+If:
+
+llm_data_splitting.py
+
+already performs the final LLM split correctly, keep only one splitting implementation.
+
+Old experimental files such as:
+
+generate_llm_features.py
+llm_features.py
+llm_sentiment.py
+
+can be consolidated if they duplicate functionality.
+
+Recommended final design:
+
+generate_llm_features.py
+
+should be the single entry point for LLM feature generation.
+
+If both exist:
+
+build_faiss_index.py
+rag_index.py
+
+use:
+
+build_faiss_index.py
+
+as the executable pipeline step and keep rag_index.py as the reusable RAG implementation module.
+
+If both exist:
+
+data_splitting.py
+llm_data_splitting.py
+
+keep both only if they have different responsibilities:
+
+data_splitting.py
+    → technical-only dataset
+
+llm_data_splitting.py
+    → final technical + LLM dataset
+
+Otherwise consolidate them.
+
+17. Do Not Delete These
+
+Keep:
+
+baseline.py
+data_download.py
+data_preprocessing.py
+feature_engineering.py
+news_collection.py
+news_preprocessing.py
+ollama_llm.py
+rag_index.py
+rag_retriever.py
+build_faiss_index.py
+generate_llm_features.py
+merge_llm_features.py
+llm_data_splitting.py
+model_training.py
+random_forest_training.py
+xgboost_training.py
+prediction.py
+predict_future.py
+pipeline.py
+
+These represent the main project workflow and evaluation components.
+
+18. Recommended Execution Order
+
+First-time setup
+
+python -m venv .venv
+
+Activate:
+
+.venv\Scripts\activate
+
+Install dependencies:
+
+pip install -r requirements.txt
+
+Verify Ollama:
+
+ollama list
+
+Run the entire project
+
+Once pipeline.py is implemented:
+
+python src/pipeline.py
+
+This should be the normal project execution method.
+
+19. Manual Execution
+
+If debugging individual stages:
+
+python src/data_download.py
+
+python src/data_preprocessing.py
+
+python src/feature_engineering.py
+
+python src/news_collection.py
+
+python src/news_preprocessing.py
+
+python src/build_faiss_index.py
+
+python src/generate_llm_features.py
+
+python src/merge_llm_features.py
+
+python src/llm_data_splitting.py
+
+python src/xgboost_training.py
+
+python src/prediction.py
+
+python src/predict_future.py
+
+20. RAG + Ollama Data Flow
+
+The intended production/research flow is:
+
+NVDA market data
+        │
+        ├──────────────► Technical features
+        │
+        │
+Financial news
+        │
+        ▼
+News preprocessing
+        │
+        ▼
+FAISS vector index
+        │
+        ▼
+Retrieve relevant news
+        │
+        ▼
+Ollama LLM
+        │
+        ▼
+Structured JSON
+        │
+        ├── LLM_Sentiment
+        ├── LLM_Market_Impact
+        ├── LLM_AI_Demand
+        ├── LLM_Regulatory_Risk
+        ├── LLM_Earnings_Outlook
+        ├── LLM_Supply_Chain_Risk
+        ├── LLM_Competition_Risk
+        └── LLM_Confidence
+        │
+        ▼
+Merge with technical features
+        │
+        ▼
+XGBoost
+        │
+        ▼
+Next-day return
+        │
+        ▼
+Predicted price + signal
+
+21. Data Leakage Prevention
+
+This project must avoid future information entering the training features.
+
+Rules:
+
+Sort all data chronologically.
+
+Create lagged features only from past data.
+
+Create Target_Return using the next trading day's close.
+
+Do not use Next_Close as an input feature.
+
+Split chronologically.
+
+News used for a prediction must have been published before the prediction timestamp.
+
+Do not generate LLM features using future news.
+
+Do not fit preprocessing/scalers on the complete dataset before splitting.
+
+Keep the test set untouched until final evaluation.
+
+22. Why the LLM Does Not Automatically Improve Accuracy
+
+The LLM is useful for information that technical indicators cannot directly represent, such as:
+
+NVIDIA earnings expectations
+
+AI infrastructure demand
+
+GPU demand
+
+regulatory developments
+
+supply-chain disruptions
+
+competitive announcements
+
+major customer announcements
+
+sentiment around NVIDIA
+
+However:
+
+LLM ≠ guaranteed prediction accuracy
+
+LLM features are noisy and may add no predictive value.
+
+The correct experiment is:
+
+Model A:
+Technical features → XGBoost
+
+vs.
+
+Model B:
+Technical features + LLM features → XGBoost
+
+Compare both on the exact same unseen test period.
+
+23. Recommended Evaluation Metrics
+
+Do not rely only on price R².
+
+Use:
+
+Return MAE
+Return RMSE
+Return R²
+Directional Accuracy
+Precision
+Recall
+F1
+Maximum Drawdown
+Sharpe Ratio
+
+For a trading-oriented project, directional accuracy and backtested risk-adjusted performance are especially important.
+
+24. Current Project Status
+
+Current successful pipeline components include:
+
+✓ Historical NVIDIA data
+✓ Technical feature engineering
+✓ Chronological train/validation/test split
+✓ Naive baseline
+✓ Linear Regression
+✓ Random Forest
+✓ XGBoost
+✓ Ollama integration
+✓ LLM financial features
+✓ LLM + XGBoost
+✓ Future prediction script
+✓ RAG architecture
+✓ FAISS architecture
+
+The main remaining engineering task is to make:
+
+src/pipeline.py
+
+the single orchestration entry point.
+
+25. Final Recommended Workflow
+
+                ┌─────────────────┐
+                │ pipeline.py     │
+                └────────┬────────┘
+                         │
+       ┌─────────────────┼──────────────────┐
+       │                 │                  │
+       ▼                 ▼                  ▼
+ Market Data          News Data          Ollama
+       │                 │                  │
+       ▼                 ▼                  │
+ Technical Features   RAG/FAISS ◄──────────┘
+       │                 │
+       └────────┬────────┘
+                ▼
+       Combined Dataset
+                │
+                ▼
+       Train / Validation / Test
+                │
+                ▼
+        XGBoost + LLM
+                │
+                ▼
+          Evaluation
+                │
+                ▼
+       Future Prediction
+                │
+                ▼
+       Return / Price / Signal
+
+26. Example Final Output
+
+============================================================
+NVIDIA FUTURE PREDICTION
+============================================================
+
+Latest market date : 2026-08-10
+Current price      : $217.55
+
+Predicted return   : 0.0770%
+Predicted price    : $217.72
+
+Signal             : HOLD
+
+The prediction is a model output and should not be interpreted as a guaranteed future price.
+
+27. Project Goal
+
+The final objective is to build a reproducible hybrid financial prediction system:
+
+Technical Analysis
+        +
 Financial News
-          +
-LLM Information Extraction
-          +
-RAG Retrieval
-          +
-Fundamental Information
-          ↓
-      Machine Learning
-          ↓
-   improves genuine
-out-of-sample prediction
+        +
+RAG
+        +
+Local Ollama LLM
+        +
+XGBoost
+        ↓
+Next-Day NVIDIA Return Prediction
 
-The most important experimental comparison will therefore be:
-
-                    Directional
-Model                Accuracy
-
-Naive                  ~50%
-Linear Regression      ~54%
-Random Forest          ~53%
-XGBoost                ~53%
-XGBoost + LLM           ?
-XGBoost + RAG + LLM     ?
-
-The LLM/RAG system should only be considered successful if it improves strictly out-of-sample performance without introducing look-ahead bias.
-
-## Important Disclaimer
-
-This project is an experimental machine-learning and generative-AI project.
-
-Stock prices are affected by many unpredictable factors, including:
-
-Macroeconomic conditions
-Interest rates
-Geopolitical events
-Market sentiment
-Unexpected announcements
-Regulatory decisions
-Institutional trading
-Liquidity
-Market structure
-Black-swan events
-
-Therefore, no model should be assumed to reliably predict future stock prices.
-
-This project is intended for:
-
-Research
-Education
-Machine Learning experimentation
-RAG experimentation
-LLM experimentation
-Financial NLP
-Time-series modeling
-
-and not as financial advice.# nvidia_stock_prediction
+The architecture is designed so that the LLM acts as an information-extraction and contextual-signal layer, while XGBoost remains the primary numerical prediction model.
